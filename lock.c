@@ -66,8 +66,8 @@ static int search_key (lock_pool_t *const pool, const char *const username, cons
     return 0;
 }
 
-static int add_key (lock_pool_t *const pool, const char *const username) {
-
+static int add_key (lock_pool_t *const pool, const char *const username)
+{
     lock_node_t *const tail = &pool->tail;
     
     lock_node_t *new_node = malloc (sizeof (lock_node_t));
@@ -115,7 +115,6 @@ int get_lock (lock_pool_t *pool, const char *const username)
         return 1;
     }
     /* no keys found - add new key to list */
-
     ret = add_key (pool, username);
     RETURN_UNLOCK_CSEC (ret);
 }
