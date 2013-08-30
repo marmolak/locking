@@ -18,6 +18,7 @@ int init_lock_pool (lock_pool_t **pool_arg)
 
     pool->tail.lock = NULL;
     pool->tail.prev = NULL;
+    pool->tail.next = NULL;
 
     pthread_mutex_init (&pool->csec, NULL);
     return 1;
@@ -30,14 +31,20 @@ int destroy_pool (lock_pool_t **pool_arg)
     
     lock_pool_t *pool = *pool_arg;
 
+    LOCK_CSEC ();
+
     lock_node_t *tail = pool->tail.prev;
     while (tail != NULL) {
         lock_node_t *new_tail = tail->prev;
+        pthread_mutex_unlock (&tail->lock->mutex);
+        pthread_mutex_destroy (&tail->lock->mutex);
         free (tail->lock);
         free (tail);
         tail = new_tail;
     }
+    UNLOCK_CSEC ();
 
+    pthread_mutex_destroy (&pool->csec);
     free ((void *)pool);
     *pool_arg = NULL;
 
@@ -68,26 +75,29 @@ static int search_key (lock_pool_t *const pool, const char *const username, cons
 
 static int add_key (lock_pool_t *const pool, const char *const username)
 {
-    lock_node_t *const tail = &pool->tail;
+    assert (pool != NULL);
+
     
     lock_node_t *new_node = malloc (sizeof (lock_node_t));
     if ( new_node == NULL ) { return 0; }
 
     new_node->lock = malloc (sizeof (lock_t));
-    if ( new_node == NULL ) {
+    if ( new_node->lock == NULL ) {
         free (new_node);
         return 0;
     }
 
     /* -1 for null char */
-    strncpy (new_node->lock->id, username, (sizeof (tail->lock->id) - 1));
+    strncpy (new_node->lock->id, username, (sizeof (new_node->lock->id) - 1));
     pthread_mutex_init (&new_node->lock->mutex, NULL);
     pthread_mutex_lock (&new_node->lock->mutex);
 
+    lock_node_t *const tail = &pool->tail;
     new_node->prev = tail->prev;
     new_node->next = tail;
 
-    pool->tail.prev = new_node;
+    if ( tail->prev != NULL ) { tail->prev->next = new_node; }
+    tail->prev = new_node;
 
     return 1;
 }
@@ -127,8 +137,9 @@ int unleash_lock (lock_pool_t *pool, const char *const username)
 
     const lock_node_t *node = NULL;
     int ret = search_key (pool, username, &node);
+
     /* Also exit of critical section */
-    if ( ret != 1 ) { RETURN_UNLOCK_CSEC (ret); }
+    if ( ret == 0 ) { RETURN_UNLOCK_CSEC (ret); }
 
     assert ( node != NULL );
 
