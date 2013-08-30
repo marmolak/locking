@@ -76,7 +76,6 @@ static int search_key (lock_pool_t *const pool, const char *const username, cons
 static int add_key (lock_pool_t *const pool, const char *const username)
 {
     assert (pool != NULL);
-
     
     lock_node_t *new_node = malloc (sizeof (lock_node_t));
     if ( new_node == NULL ) { return 0; }
@@ -93,10 +92,13 @@ static int add_key (lock_pool_t *const pool, const char *const username)
     pthread_mutex_lock (&new_node->lock->mutex);
 
     lock_node_t *const tail = &pool->tail;
+
     new_node->prev = tail->prev;
     new_node->next = tail;
 
-    if ( tail->prev != NULL ) { tail->prev->next = new_node; }
+    if ( tail->prev != NULL ) {
+        if ( tail->prev->next != NULL ) { tail->prev->next = new_node; }
+    }
     tail->prev = new_node;
 
     return 1;

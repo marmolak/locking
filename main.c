@@ -9,7 +9,7 @@ int main (int argc, char **argv)
 
     init_lock_pool (&pool);
 
-    int count = 10000;
+    int count = 1000;
 
     int p = 0;
     for ( p = 0; p < count; p++ ) {
