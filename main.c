@@ -7,30 +7,30 @@ int main (int argc, char **argv)
 {
     lock_pool_t *pool = NULL;
 
-    init_lock_pool (&pool);
+    init_lock_pool ();
 
-    int count = 1000;
+    int count = 20000;
 
     int p = 0;
     for ( p = 0; p < count; p++ ) {
         char username[100] = { 0 };
         sprintf (username, "username%d", p);
-        get_lock (pool, username);
+        get_lock (username);
     }
 
     for ( p = 0; p < count; p++ ) {
         char username[100] = { 0 };
         sprintf (username, "username%d", p);
-        unleash_lock (pool, username);
+        release_lock (username);
     }
 
     for ( p = 0; p < count; p++ ) {
         char username[100] = { 0 };
         sprintf (username, "username%d", p);
-        get_lock (pool, username);
+        //get_lock (username);
     }
     
-    destroy_pool (&pool);
+    destroy_lock_pool ();
 
     return EXIT_SUCCESS;
 }

@@ -3,9 +3,12 @@
 
 #include <pthread.h>
 
+#define USERNAME_LEN_MAX 32
+
 typedef struct lock {
-    char id[32];
+    char id [USERNAME_LEN_MAX];
     pthread_mutex_t mutex;
+    unsigned int instances;
 } lock_t;
 
 typedef struct lock_node {
@@ -15,13 +18,14 @@ typedef struct lock_node {
 } lock_node_t;
 
 typedef struct lock_pool {
-    lock_node_t tail;
+    lock_node_t* tail;
     pthread_mutex_t csec;
 } lock_pool_t;
 
-int init_lock_pool (lock_pool_t **pool_arg);
-int destroy_pool (lock_pool_t **pool_arg);
-int get_lock (lock_pool_t *pool, const char *const username);
-int unleash_lock (lock_pool_t *pool, const char *const username);
+void init_lock_pool (void);
+void destroy_lock_pool (void);
+int get_lock (const char *const username);
+int release_lock (const char *const username);
 
+#undef USERNAME_LEN_MAX
 #endif /* _LOCK_H */
