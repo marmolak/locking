@@ -1,4 +1,4 @@
-all:
+all: main.c lock.c lock.h
 	gcc `pkg-config --cflags --libs glib-2.0` -o lock main.c lock.c -g -Wall -Wextra -lpthread
 
 leaks: all

@@ -27,7 +27,7 @@ int main (int argc, char **argv)
     for ( p = 0; p < count; p++ ) {
         char username[100] = { 0 };
         sprintf (username, "username%d", p);
-        //get_lock (username);
+        get_lock (username);
     }
     
     destroy_lock_pool ();

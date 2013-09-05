@@ -42,7 +42,7 @@ static void new_pool (void)
         return;
     }
 
-    hash_table = g_hash_table_new_full (&g_str_hash, &g_str_equal, NULL, &free_lock);
+    hash_table = g_hash_table_new_full (&g_str_hash, &g_direct_equal, NULL, &free_lock);
     if ( hash_table == NULL ) {
         // fail
         return;
