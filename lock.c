@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <error.h>
 #include <limits.h>
+#include <glib.h>
 
 #include "lock.h"
 
@@ -11,10 +12,15 @@
 #define RETURN_UNLOCK_CSEC(code) do { UNLOCK_CSEC(); return (code); } while (0)
 
 static lock_pool_t *pool = NULL;
+static GHashTable *hash_table = NULL;
+
 static pthread_once_t pool_is_initialized = PTHREAD_ONCE_INIT;
 static unsigned int ref_count = 0;
 
+/* Callbacks */
 static void new_pool (void);
+static void free_lock (gpointer lock);
+/**/
 
 void init_lock_pool (void)
 {
@@ -36,7 +42,23 @@ static void new_pool (void)
         return;
     }
 
+    hash_table = g_hash_table_new_full (&g_str_hash, &g_str_equal, NULL, &free_lock);
+    if ( hash_table == NULL ) {
+        // fail
+        return;
+    }
+
     pthread_mutex_init (&pool->csec, NULL);
+}
+
+static void free_lock (gpointer lock)
+{
+    lock_t *const lck = (lock_t *) lock;
+
+    pthread_mutex_unlock (&lck->mutex);
+    pthread_mutex_destroy (&lck->mutex);
+
+    free (lock);
 }
 
 void destroy_lock_pool (void)
@@ -48,40 +70,31 @@ void destroy_lock_pool (void)
 
     if ( ref_count > 0 ) { UNLOCK_CSEC(); return; }
 
-    lock_node_t *tail = pool->tail;
-    while (tail != NULL) {
-        lock_node_t *new_tail = tail->prev;
-        pthread_mutex_unlock (&tail->lock->mutex);
-        pthread_mutex_destroy (&tail->lock->mutex);
-        free (tail->lock);
-        free (tail);
-        tail = new_tail;
-    }
+    assert (hash_table != NULL);
+    /* Initialize hash table. */
+    /* Remove all pairs. Memory is deallocated by free_lock callback. */
+    g_hash_table_destroy (hash_table);
+    hash_table = NULL;
+
     UNLOCK_CSEC ();
 
     pthread_mutex_destroy (&pool->csec);
     free ((void *)pool);
 
+    /* Initializae lock pool. */
     pool = NULL;
     pool_is_initialized = PTHREAD_ONCE_INIT;
 }
 
 /* search for keys */
-static int search_key (const char *const username, const lock_node_t **node)
+static int search_key (const char *const username, lock_t **lck)
 {
     assert (pool != NULL);
 
-    if ( pool->tail == NULL ) { return 0; }
+    *lck = (lock_t *) g_hash_table_lookup (hash_table, (gpointer) username);
 
-    const lock_node_t *tail = pool->tail;
-    while (tail != NULL) {
-        const char *usr = tail->lock->id;
-        if ( strcmp (usr, username) == 0 ) {
-            *node = tail;
-            return 1;
-        }
-
-        tail = tail->prev;
+    if ( *lck != NULL ) {
+        return 1;
     }
 
     return 0;
@@ -91,29 +104,19 @@ static int add_key (const char *const username)
 {
     assert (pool != NULL);
 
-    lock_node_t *const new_node = calloc (1, sizeof (lock_node_t));
-    if ( new_node == NULL ) { return 0; }
-
-    new_node->lock = calloc (1, sizeof (lock_t));
-    if ( new_node->lock == NULL ) {
-        free (new_node);
-        // fail with something
+    lock_t *const new_lock = calloc (1, sizeof (lock_t));
+    if ( new_lock == NULL ) {
+        // report to cim
         return 0;
     }
 
     /* -1 for null char */
-    strncpy (new_node->lock->id, username, (sizeof (new_node->lock->id) - 1));
-    pthread_mutex_init (&new_node->lock->mutex, NULL);
-    pthread_mutex_lock (&new_node->lock->mutex);
-    new_node->lock->instances = 1;
+    strncpy (new_lock->id, username, (sizeof (new_lock->id) - 1));
+    pthread_mutex_init (&new_lock->mutex, NULL);
+    pthread_mutex_lock (&new_lock->mutex);
+    new_lock->instances = 1;
 
-    /* Ok. We have lock allocated and zeroed by calloc. */
-    if ( pool->tail != NULL ) {
-        pool->tail->next = new_node;
-    }
-    new_node->prev = pool->tail;
-    pool->tail = new_node; 
-
+    g_hash_table_insert (hash_table, (gpointer) username, new_lock);
     return 1;
 }
 
@@ -125,11 +128,9 @@ int get_lock (const char *const username)
      * Global critical section
      */
 
-    const lock_node_t *node = NULL;
-    int ret = search_key (username, &node);
+    lock_t *lck = NULL;
+    int ret = search_key (username, &lck);
     if ( ret == 1 ) {
-        assert (node != NULL);
-        lock_t *const lck = node->lock;
         assert (lck != NULL);
 
         pthread_mutex_t *const mutex = &lck->mutex;
@@ -156,36 +157,21 @@ int release_lock (const char *const username)
     assert (pool != NULL);
     LOCK_CSEC ();
 
-    const lock_node_t *node = NULL;
-    int ret = search_key (username, &node);
+    lock_t *lck = NULL;
+    int ret = search_key (username, &lck);
 
     /* Also exit of critical section */
     if ( ret == 0 ) { RETURN_UNLOCK_CSEC (ret); }
 
-    assert (node != NULL);
+    assert (lck != NULL);
 
-    --node->lock->instances;
-    if ( node->lock->instances > 0 ) {
-        pthread_mutex_unlock (&node->lock->mutex);
+    --lck->instances;
+    if ( lck->instances > 0 ) {
+        pthread_mutex_unlock (&lck->mutex);
         RETURN_UNLOCK_CSEC (ret);
     }
 
-    lock_node_t *prev = node->prev;
-    lock_node_t *next = node->next;
-
-    if ( next != NULL ) {
-        next->prev = node->next;
-    } else {
-        /* we are last element */
-        pool->tail = NULL;
-    }
-    if ( prev != NULL ) { prev->next = node->prev; }
-
-    pthread_mutex_unlock (&node->lock->mutex);
-    pthread_mutex_destroy (&node->lock->mutex);
-
-    free (node->lock);
-    free ((void *)node);
+    g_hash_table_remove (hash_table, (gpointer) username);
     
     RETURN_UNLOCK_CSEC (ret);
 }

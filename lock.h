@@ -11,14 +11,7 @@ typedef struct lock {
     unsigned int instances;
 } lock_t;
 
-typedef struct lock_node {
-    lock_t *lock;
-    struct lock_node *prev;
-    struct lock_node *next;
-} lock_node_t;
-
 typedef struct lock_pool {
-    lock_node_t* tail;
     pthread_mutex_t csec;
 } lock_pool_t;
 
