@@ -5,8 +5,6 @@
 
 int main (int argc, char **argv)
 {
-    lock_pool_t *pool = NULL;
-
     init_lock_pool ();
 
     int count = 20000;

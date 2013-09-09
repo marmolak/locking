@@ -12,7 +12,6 @@
 #define RETURN_UNLOCK_CSEC(code) do { UNLOCK_CSEC(); return (code); } while (0)
 
 static lock_pool_t *pool = NULL;
-static GHashTable *hash_table = NULL;
 
 static pthread_once_t pool_is_initialized = PTHREAD_ONCE_INIT;
 static unsigned int ref_count = 0;
@@ -22,29 +21,37 @@ static void new_pool (void);
 static void free_lock (gpointer lock);
 /**/
 
-void init_lock_pool (void)
+/* GCC attributes */
+static int search_key (const const char *const username, lock_t **lck) __attribute__((pure)) __attribute__((nonnull));
+static void free_lock (gpointer lock) __attribute__((nonnull));
+
+int init_lock_pool (void)
 {
     pthread_once (&pool_is_initialized, new_pool);
 
     LOCK_CSEC ();
-    if (ref_count >= UINT_MAX) {
-        // fail
-    }
+
+    if ( pool == NULL ) { RETURN_UNLOCK_CSEC (0); }
+
     ++ref_count;
+    if (ref_count >= UINT_MAX) { RETURN_UNLOCK_CSEC (0); }
+
     UNLOCK_CSEC ();
+
+    return 1;
 }
 
 static void new_pool (void)
 {
     pool = calloc (1, sizeof (lock_pool_t));
     if ( pool == NULL ) {
-        //error("Memory allocation failed");
         return;
     }
 
-    hash_table = g_hash_table_new_full (&g_str_hash, &g_direct_equal, NULL, &free_lock);
-    if ( hash_table == NULL ) {
-        // fail
+    pool->hash_table = g_hash_table_new_full (&g_str_hash, &g_direct_equal, NULL, &free_lock);
+    if ( pool->hash_table == NULL ) {
+        free (pool);
+        pool = NULL;
         return;
     }
 
@@ -64,22 +71,21 @@ static void free_lock (gpointer lock)
 void destroy_lock_pool (void)
 {
     assert (pool != NULL);
+    
     LOCK_CSEC ();
 
     --ref_count;
 
     if ( ref_count > 0 ) { UNLOCK_CSEC(); return; }
 
-    assert (hash_table != NULL);
-    /* Initialize hash table. */
+    assert (pool->hash_table != NULL);
     /* Remove all pairs. Memory is deallocated by free_lock callback. */
-    g_hash_table_destroy (hash_table);
-    hash_table = NULL;
+    g_hash_table_destroy (pool->hash_table);
 
     UNLOCK_CSEC ();
 
     pthread_mutex_destroy (&pool->csec);
-    free ((void *)pool);
+    free ((void *) pool);
 
     /* Initializae lock pool. */
     pool = NULL;
@@ -87,11 +93,11 @@ void destroy_lock_pool (void)
 }
 
 /* search for keys */
-static int search_key (const char *const username, lock_t **lck)
+static int search_key (const const char *const username, lock_t **lck)
 {
     assert (pool != NULL);
 
-    *lck = (lock_t *) g_hash_table_lookup (hash_table, (gpointer) username);
+    *lck = (lock_t *) g_hash_table_lookup (pool->hash_table, (gpointer) username);
 
     if ( *lck != NULL ) {
         return 1;
@@ -100,7 +106,7 @@ static int search_key (const char *const username, lock_t **lck)
     return 0;
 }
 
-static int add_key (const char *const username)
+static int add_key (const const char *const username)
 {
     assert (pool != NULL);
 
@@ -116,7 +122,7 @@ static int add_key (const char *const username)
     pthread_mutex_lock (&new_lock->mutex);
     new_lock->instances = 1;
 
-    g_hash_table_insert (hash_table, (gpointer) username, new_lock);
+    g_hash_table_insert (pool->hash_table, (gpointer) username, new_lock);
     return 1;
 }
 
@@ -171,7 +177,7 @@ int release_lock (const char *const username)
         RETURN_UNLOCK_CSEC (ret);
     }
 
-    g_hash_table_remove (hash_table, (gpointer) username);
+    g_hash_table_remove (pool->hash_table, (gpointer) username);
     
     RETURN_UNLOCK_CSEC (ret);
 }
