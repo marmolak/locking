@@ -71,7 +71,7 @@ static void free_lock (gpointer lock)
 void destroy_lock_pool (void)
 {
     assert (pool != NULL);
-    
+
     LOCK_CSEC ();
 
     --ref_count;
