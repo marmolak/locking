@@ -4,7 +4,8 @@
 #include <pthread.h>
 #include <glib.h>
 
-#define USERNAME_LEN_MAX 32
+/* Global */
+#define USERNAME_LEN_MAX 33
 
 typedef struct lock {
     GQuark q;
@@ -23,5 +24,4 @@ void destroy_lock_pool (void);
 int get_lock (const char *const username) __attribute__((nonnull));
 int release_lock (const char *const username) __attribute__((nonnull));
 
-#undef USERNAME_LEN_MAX
 #endif /* _LOCK_H */
