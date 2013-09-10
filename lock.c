@@ -28,11 +28,11 @@ static void free_lock (gpointer lock) __attribute__((nonnull));
 int init_lock_pool (void)
 {
     pthread_once (&pool_is_initialized, new_pool);
+    if ( pool == NULL ) { return 0; }
 
     LOCK_CSEC ();
 
-    if ( pool == NULL ) { RETURN_UNLOCK_CSEC (0); }
-
+    pool = NULL;
     ++ref_count;
     if (ref_count >= UINT_MAX) { RETURN_UNLOCK_CSEC (0); }
 
