@@ -180,7 +180,7 @@ int release_lock (const char *const username)
     }
 
     g_hash_table_remove (pool->hash_table, (gpointer) &q);
-    
+
     RETURN_UNLOCK_CSEC (ret);
 }
 
