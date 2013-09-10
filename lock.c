@@ -115,7 +115,6 @@ static int add_key (const GQuark q)
         return 0;
     }
 
-    /* -1 for null char */
     pthread_mutex_init (&new_lock->mutex, NULL);
     pthread_mutex_lock (&new_lock->mutex);
     new_lock->instances = 1;
@@ -135,14 +134,14 @@ int get_lock (const char *const username)
      */
 
     lock_t *lck = NULL;
-    const GQuark q = g_quark_from_string (username);
+    const GQuark q = g_quark_from_static_string (username);
     int ret = search_key (q, &lck);
     if ( ret == 1 ) {
         assert (lck != NULL);
 
         pthread_mutex_t *const mutex = &lck->mutex;
         if ( lck->instances >= UINT_MAX ) {
-            // fail - how?
+            RETURN_UNLOCK_CSEC (0);
         }
         ++lck->instances;
 
@@ -165,7 +164,7 @@ int release_lock (const char *const username)
     LOCK_CSEC ();
 
     lock_t *lck = NULL;
-    const GQuark q = g_quark_from_string (username);
+    const GQuark q = g_quark_from_static_string (username);
     int ret = search_key (q, &lck);
 
     /* Also exit of critical section */
