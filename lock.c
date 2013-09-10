@@ -183,7 +183,6 @@ int release_lock (const char *const username)
     RETURN_UNLOCK_CSEC (ret);
 }
 
-#undef PREALOCATED_LOCKS_NUM
 #undef LOCK_CSEC
 #undef UNLOCK_CSEC
 #undef RETURN_UNLOCK_CSEC
