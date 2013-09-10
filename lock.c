@@ -21,9 +21,10 @@ static void new_pool (void);
 static void free_lock (gpointer lock);
 /**/
 
-/* GCC attributes */
-static int search_key (const const char *const username, lock_t **lck) __attribute__((pure)) __attribute__((nonnull));
+/* Internal functions  */
+static int search_key (GQuark q, lock_t **lck) __attribute__((pure)) __attribute__((nonnull));
 static void free_lock (gpointer lock) __attribute__((nonnull));
+static int add_key (GQuark q);
 
 int init_lock_pool (void)
 {
@@ -32,7 +33,6 @@ int init_lock_pool (void)
 
     LOCK_CSEC ();
 
-    pool = NULL;
     ++ref_count;
     if (ref_count >= UINT_MAX) { RETURN_UNLOCK_CSEC (0); }
 
@@ -48,7 +48,7 @@ static void new_pool (void)
         return;
     }
 
-    pool->hash_table = g_hash_table_new_full (&g_str_hash, &g_direct_equal, NULL, &free_lock);
+    pool->hash_table = g_hash_table_new_full (&g_int_hash, &g_int_equal, NULL, &free_lock);
     if ( pool->hash_table == NULL ) {
         free (pool);
         pool = NULL;
@@ -93,11 +93,11 @@ void destroy_lock_pool (void)
 }
 
 /* search for keys */
-static int search_key (const const char *const username, lock_t **lck)
+static int search_key (GQuark q, lock_t **lck)
 {
     assert (pool != NULL);
 
-    *lck = (lock_t *) g_hash_table_lookup (pool->hash_table, (gpointer) username);
+    *lck = (lock_t *) g_hash_table_lookup (pool->hash_table, (gpointer) &q);
 
     if ( *lck != NULL ) {
         return 1;
@@ -106,23 +106,23 @@ static int search_key (const const char *const username, lock_t **lck)
     return 0;
 }
 
-static int add_key (const const char *const username)
+static int add_key (const GQuark q)
 {
     assert (pool != NULL);
 
     lock_t *const new_lock = calloc (1, sizeof (lock_t));
     if ( new_lock == NULL ) {
-        // report to cim
         return 0;
     }
 
     /* -1 for null char */
-    strncpy (new_lock->id, username, (sizeof (new_lock->id) - 1));
     pthread_mutex_init (&new_lock->mutex, NULL);
     pthread_mutex_lock (&new_lock->mutex);
     new_lock->instances = 1;
 
-    g_hash_table_insert (pool->hash_table, (gpointer) username, new_lock);
+    new_lock->q = q;
+
+    g_hash_table_insert (pool->hash_table, (gpointer) &new_lock->q, new_lock);
     return 1;
 }
 
@@ -135,7 +135,8 @@ int get_lock (const char *const username)
      */
 
     lock_t *lck = NULL;
-    int ret = search_key (username, &lck);
+    const GQuark q = g_quark_from_string (username);
+    int ret = search_key (q, &lck);
     if ( ret == 1 ) {
         assert (lck != NULL);
 
@@ -153,7 +154,7 @@ int get_lock (const char *const username)
         return 1;
     }
     /* no keys found - add new key to list */
-    ret = add_key (username);
+    ret = add_key (q);
     RETURN_UNLOCK_CSEC (ret);
 }
 
@@ -164,7 +165,8 @@ int release_lock (const char *const username)
     LOCK_CSEC ();
 
     lock_t *lck = NULL;
-    int ret = search_key (username, &lck);
+    const GQuark q = g_quark_from_string (username);
+    int ret = search_key (q, &lck);
 
     /* Also exit of critical section */
     if ( ret == 0 ) { RETURN_UNLOCK_CSEC (ret); }
@@ -177,7 +179,7 @@ int release_lock (const char *const username)
         RETURN_UNLOCK_CSEC (ret);
     }
 
-    g_hash_table_remove (pool->hash_table, (gpointer) username);
+    g_hash_table_remove (pool->hash_table, (gpointer) &q);
     
     RETURN_UNLOCK_CSEC (ret);
 }

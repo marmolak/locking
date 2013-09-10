@@ -7,7 +7,7 @@
 #define USERNAME_LEN_MAX 32
 
 typedef struct lock {
-    char id [USERNAME_LEN_MAX];
+    GQuark q;
     pthread_mutex_t mutex;
     unsigned int instances;
 } lock_t;
